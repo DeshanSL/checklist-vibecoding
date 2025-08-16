@@ -43,9 +43,16 @@ jobs:
       run: |
         npm run build
 
-    - name: Export static files (if needed)
+    - name: Create production environment file
       run: |
-        npm run export || echo "Export not configured, using build output"
+        echo "NODE_ENV=production" > .env.production
+        echo "PORT=3001" >> .env.production
+        echo "NEXT_PUBLIC_FIREBASE_API_KEY=${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}" >> .env.production
+        echo "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}" >> .env.production
+        echo "NEXT_PUBLIC_FIREBASE_PROJECT_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}" >> .env.production
+        echo "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}" >> .env.production
+        echo "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}" >> .env.production
+        echo "NEXT_PUBLIC_FIREBASE_APP_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}" >> .env.production
 
     - name: Clean remote folder before deploy
       if: matrix.node-version == '22.x' && github.event_name == 'push'
@@ -56,10 +63,10 @@ jobs:
         password: ${{ secrets.VPS_PASSWORD }}
         port: 22
         script: |
-          rm -rf ~/builds/checklist-app/v1-0-0/build/*
-          mkdir -p ~/builds/checklist-app/v1-0-0/build
+          rm -rf ~/builds/checklist-app/v1-0-0/*
+          mkdir -p ~/builds/checklist-app/v1-0-0
 
-    # Only deploy if Node version is the latest (22.x) and it's a push to main/master
+    # Deploy entire Next.js application
     - name: Deploy to VPS
       if: matrix.node-version == '22.x' && github.event_name == 'push'
       uses: appleboy/scp-action@v0.1.7
@@ -68,11 +75,11 @@ jobs:
         username: ${{ secrets.VPS_USER }}
         password: ${{ secrets.VPS_PASSWORD }}
         port: 22
-        source: "out/*,!out/.gitkeep,.next/static/**"
-        target: "~/builds/checklist-app/v1-0-0/build"
-        strip_components: 1
+        source: ".next/,package.json,package-lock.json,next.config.js,public/,.env.production"
+        target: "~/builds/checklist-app/v1-0-0/"
 
-    - name: Restart application service (optional)
+    # Install dependencies and start/restart PM2 process
+    - name: Install dependencies and restart PM2
       if: matrix.node-version == '22.x' && github.event_name == 'push'
       uses: appleboy/ssh-action@v0.1.7
       with:
@@ -81,7 +88,17 @@ jobs:
         password: ${{ secrets.VPS_PASSWORD }}
         port: 22
         script: |
-          # Restart your web server or application service if needed
-          # Example: sudo systemctl restart nginx
-          # Example: pm2 restart checklist-app
+          cd ~/builds/checklist-app/v1-0-0
+          npm ci --production
+
+          # Stop existing PM2 process if running
+          pm2 stop checklist-app || true
+          pm2 delete checklist-app || true
+
+          # Start new PM2 process
+          pm2 start npm --name "checklist-app" -- start
+          pm2 save
+
+          # Show PM2 status
+          pm2 status
           echo "Deployment completed for checklist app"
