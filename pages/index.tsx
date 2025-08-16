@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 
@@ -11,12 +11,19 @@ function generateUniqueId(): string {
 
 export default function Home() {
   const router = useRouter()
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    // Generate unique ID and redirect
-    const uniqueId = generateUniqueId()
-    router.replace(`/checklist/${uniqueId}`)
-  }, [router])
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (mounted) {
+      // Generate unique ID and redirect
+      const uniqueId = generateUniqueId()
+      router.replace(`/checklist/${uniqueId}/`)
+    }
+  }, [router, mounted])
 
   return (
     <>
